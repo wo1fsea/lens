@@ -1,2 +1,1 @@
-# lens
-path tracing
+# prism
