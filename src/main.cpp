@@ -15,7 +15,7 @@
 
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 320;
-const int DEPTH = 10;
+const int DEPTH = 8;
 
 bool init();
 void close();
@@ -214,13 +214,15 @@ std::tuple<hittable_list, camera> scene_3_ball(int idx)
 	return std::make_tuple(world, cam);
 }
 
-static std::array<std::array<uint32_t, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_times{0};
-static std::array<std::array<color, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_values{color{0, 0, 0}};
+std::array<std::array<uint32_t, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_times{0};
+std::array<std::array<color, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_values{color{0, 0, 0}};
 
 bool signal_to_stop = false;
 int block_size = 3;
 // int num_threads = block_size * block_size;
 int num_threads = std::thread::hardware_concurrency() - 1;
+std::vector<std::thread> threads(num_threads);
+
 void ray_task(hittable_list world, camera cam, int task_idx)
 {
 	int iidx = task_idx / block_size;
@@ -230,7 +232,6 @@ void ray_task(hittable_list world, camera cam, int task_idx)
 	{
 		int i = random_int(0, SCREEN_WIDTH - 1);
 		int j = random_int(0, SCREEN_HEIGHT - 1);
-
 
 		i = i - i % block_size + task_idx;
 		i = SCREEN_WIDTH - 1 > i ? i : SCREEN_WIDTH - 1;
@@ -253,6 +254,46 @@ void ray_task(hittable_list world, camera cam, int task_idx)
 	}
 }
 
+void start_threads(int scene_idx)
+{
+	for (int i = 0; i < SCREEN_WIDTH; i++)
+		for (int j = 0; j < SCREEN_HEIGHT; j++)
+		{
+			sample_values[i][j] = color(0, 0, 0);
+			sample_times[i][j] = 0;
+		}
+
+	// World
+	hittable_list world;
+	camera cam;
+
+	switch (scene_idx)
+	{
+	case 1:
+	case 2:
+	case 3:
+		std::tie(world, cam) = scene_3_ball(scene_idx);
+		break;
+	case 4:
+	default:
+		std::tie(world, cam) = scene_random();
+		break;
+	}
+
+	signal_to_stop = false;
+
+	for (int idx = 0; idx < num_threads; idx++)
+	{
+		threads[idx] = std::thread(ray_task, world, cam, idx);
+	}
+}
+
+void stop_threads()
+{
+	signal_to_stop = true;
+	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
+}
+
 int main(int argc, char *args[])
 {
 	//Start up SDL and create window
@@ -266,39 +307,12 @@ int main(int argc, char *args[])
 	SDL_FillRect(gScreenSurface, NULL, SDL_MapRGB(gScreenSurface->format, 0x00, 0x00, 0x00));
 	SDL_UpdateWindowSurface(gWindow);
 
-	// World
-	hittable_list world;
-	camera cam;
-
 	int idx = 3;
 	if (argc >= 2)
 	{
 		idx = args[1][0] - '0';
 	}
-
-	switch (idx)
-	{
-	case 0:
-	case 1:
-	case 2:
-		std::tie(world, cam) = scene_3_ball(idx);
-		break;
-	case 3:
-	default:
-		std::tie(world, cam) = scene_random();
-		break;
-	}
-
-	signal_to_stop = false;
-
-	std::cout << num_threads;
-
-	std::vector<std::thread> threads(num_threads);
-
-	for (int idx = 0; idx < num_threads; idx++)
-	{
-		threads[idx] = std::thread(ray_task, world, cam, idx);
-	}
+	start_threads(idx);
 
 	SDL_Event e;
 	while (true)
@@ -312,14 +326,48 @@ int main(int argc, char *args[])
 			}
 
 		SDL_UpdateWindowSurface(gWindow);
-		if (SDL_PollEvent(&e) && e.type == SDL_QUIT)
+
+		// event
+		if (SDL_PollEvent(&e) == 0)
 		{
-			signal_to_stop = true;
+			continue;
+		}
+
+		switch (e.type)
+		{
+		case SDL_QUIT:
+			goto EXIT;
+		case SDL_KEYDOWN:
+			switch (e.key.keysym.sym)
+			{
+			case SDLK_q:
+				signal_to_stop = true;
+				goto EXIT;
+			case SDLK_1:
+				stop_threads();
+				start_threads(1);
+				break;
+			case SDLK_2:
+				stop_threads();
+				start_threads(2);
+				break;
+			case SDLK_3:
+				stop_threads();
+				start_threads(3);
+				break;
+			case SDLK_4:
+				stop_threads();
+				start_threads(4);
+				break;
+			}
+			break;
+		default:
 			break;
 		}
 	}
 
-	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
+EXIT:
+	stop_threads();
 	close();
 	return 0;
 }
