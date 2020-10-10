@@ -6,6 +6,7 @@ if (APPLE)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/sdl2)
+
 set(CMAKE_CXX_STANDARD 17)
 find_package(SDL2 REQUIRED)
 
@@ -22,6 +23,11 @@ file(GLOB PROJECT_CONFIGS CMakeLists.txt
                          .gitattributes
                          .gitignore
                          .gitmodules)
+
+if(WIN32)
+file(COPY "${SDL2_INCLUDE_DIR}/../../bin/SDL2.dll"
+            DESTINATION ${CMAKE_BINARY_DIR}/${PROJECT_NAME})
+endif()
 
 source_group("include" FILES ${PROJECT_HEADERS})
 source_group("src" FILES ${PROJECT_SOURCES})
@@ -50,3 +56,5 @@ set_target_properties(
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${PROJECT_NAME}
     )
+
+

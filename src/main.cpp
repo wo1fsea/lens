@@ -91,6 +91,37 @@ color ray_color(const ray &r, const hittable &world, int depth)
 	return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 }
 
+color ray_color_rr(const ray &r, const hittable &world, double p)
+{
+	hit_record rec;
+
+	if (random_double() < (1 - p))
+		return color(0, 0, 0);
+
+	color result;
+
+	if (world.hit(r, 0.001, infinity, rec))
+	{
+		ray scattered;
+		color attenuation;
+		if (rec.mat_ptr->scatter(r, rec, attenuation, scattered))
+		{
+			result = attenuation * ray_color_rr(scattered, world, p);
+		}
+		else
+		{
+			result = color(0, 0, 0);
+		}
+	}
+	else
+	{
+		vec3 unit_direction = unit_vector(r.direction());
+		auto t = 0.5 * (unit_direction.y() + 1.0);
+		result = (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
+	}
+	return result / p;
+}
+
 std::tuple<hittable_list, camera> scene_random()
 {
 	hittable_list world;
@@ -182,7 +213,7 @@ std::tuple<hittable_list, camera> scene_3_ball(int idx)
 		break;
 
 	case 1:
-		cam= camera(point3(-2, 2, 1), point3(0, 0, -1), vec3(0, 1, 0), 20, aspect_ratio);
+		cam = camera(point3(-2, 2, 1), point3(0, 0, -1), vec3(0, 1, 0), 20, aspect_ratio);
 		break;
 
 	case 2:
@@ -222,7 +253,7 @@ int main(int argc, char *args[])
 	camera cam;
 
 	int idx = 3;
-	if(argc >= 2)
+	if (argc >= 2)
 	{
 		idx = args[1][0] - '0';
 	}
@@ -255,7 +286,7 @@ int main(int argc, char *args[])
 		auto u = (i + random_double()) / (image_width - 1);
 		auto v = (j + random_double()) / (image_height - 1);
 		ray r = cam.get_ray(u, v);
-		pixel_color += ray_color(r, world, max_depth);
+		pixel_color += ray_color_rr(r, world, 0.9);
 		pixel_sample += 1;
 
 		auto c_tuple = get_color(pixel_color, pixel_sample);
