@@ -1,5 +1,4 @@
 #include <SDL.h>
-#include <stdio.h>
 #include <iostream>
 #include <array>
 #include <tuple>
@@ -15,7 +14,7 @@
 
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 320;
-const int DEPTH = 8;
+const int DEPTH = 32;
 
 bool init();
 void close();
@@ -219,7 +218,6 @@ std::array<std::array<color, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_values{color{0
 
 bool signal_to_stop = false;
 int block_size = 3;
-// int num_threads = block_size * block_size;
 int num_threads = std::thread::hardware_concurrency() - 1;
 std::vector<std::thread> threads(num_threads);
 
@@ -235,10 +233,6 @@ void ray_task(hittable_list world, camera cam, int task_idx)
 
 		i = i - i % block_size + task_idx;
 		i = SCREEN_WIDTH - 1 > i ? i : SCREEN_WIDTH - 1;
-		// i = i - i % block_size + iidx;
-		// i = SCREEN_WIDTH - 1 > i ? i : SCREEN_WIDTH - 1;
-		// j = j - j % block_size + jidx;
-		// j = SCREEN_HEIGHT - 1 > j ? j : SCREEN_HEIGHT - 1;
 
 		color &pixel_color = sample_values[i][j];
 		uint32_t &pixel_sample = sample_times[i][j];
@@ -249,7 +243,6 @@ void ray_task(hittable_list world, camera cam, int task_idx)
 
 		pixel_sample += 1;
 
-		// pixel_color += ray_color_rr(r, world, 1. / DEPTH);
 		pixel_color += ray_color(r, world, DEPTH);
 	}
 }
@@ -296,7 +289,6 @@ void stop_threads()
 
 int main(int argc, char *args[])
 {
-	//Start up SDL and create window
 	if (!init())
 	{
 		printf("Failed to initialize!\n");
