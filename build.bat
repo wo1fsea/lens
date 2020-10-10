@@ -4,6 +4,6 @@ cd .\build
 cmake -DCMAKE_TOOLCHAIN_FILE="g:/vcpkg/scripts/buildsystems/vcpkg.cmake" ..\
 cmake --build .
 cd .\lens
-.\Debug\lens.exe
+.\Debug\lens.exe 1
 cd ..\..\
 pause

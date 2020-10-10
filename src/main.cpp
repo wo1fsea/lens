@@ -91,14 +91,9 @@ color ray_color(const ray &r, const hittable &world, int depth)
 	return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 }
 
-color ray_color_rr(const ray &r, const hittable &world, double p)
+color ray_color_rr(const ray &r, const hittable &world, double p_lost)
 {
 	hit_record rec;
-
-	if (random_double() < (1 - p))
-		return color(0, 0, 0);
-
-	color result;
 
 	if (world.hit(r, 0.001, infinity, rec))
 	{
@@ -106,20 +101,14 @@ color ray_color_rr(const ray &r, const hittable &world, double p)
 		color attenuation;
 		if (rec.mat_ptr->scatter(r, rec, attenuation, scattered))
 		{
-			result = attenuation * ray_color_rr(scattered, world, p);
+			return attenuation * (random_double() < p_lost ? color(0, 0, 0) : ray_color_rr(scattered, world, p_lost) / (1. - p_lost));
 		}
-		else
-		{
-			result = color(0, 0, 0);
-		}
+		return color(0, 0, 0);
 	}
-	else
-	{
-		vec3 unit_direction = unit_vector(r.direction());
-		auto t = 0.5 * (unit_direction.y() + 1.0);
-		result = (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
-	}
-	return result / p;
+
+	vec3 unit_direction = unit_vector(r.direction());
+	auto t = 0.5 * (unit_direction.y() + 1.0);
+	return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 }
 
 std::tuple<hittable_list, camera> scene_random()
@@ -245,8 +234,7 @@ int main(int argc, char *args[])
 	// Image
 	const int image_width = SCREEN_WIDTH;
 	const int image_height = SCREEN_HEIGHT;
-	const int samples_per_pixel = 10;
-	const int max_depth = 10;
+	const int depth = 3;
 
 	// World
 	hittable_list world;
@@ -286,7 +274,9 @@ int main(int argc, char *args[])
 		auto u = (i + random_double()) / (image_width - 1);
 		auto v = (j + random_double()) / (image_height - 1);
 		ray r = cam.get_ray(u, v);
-		pixel_color += ray_color_rr(r, world, 0.9);
+		pixel_color += ray_color_rr(r, world, 1. / depth);
+		// pixel_color += ray_color(r, world, depth);
+
 		pixel_sample += 1;
 
 		auto c_tuple = get_color(pixel_color, pixel_sample);
