@@ -3,6 +3,8 @@
 #include <iostream>
 #include <array>
 #include <tuple>
+#include <thread>
+#include <functional>
 
 #include "rtweekend.h"
 #include "camera.h"
@@ -13,6 +15,7 @@
 
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 320;
+const int DEPTH = 10;
 
 bool init();
 void close();
@@ -60,13 +63,6 @@ void close()
 
 	//Quit SDL subsystems
 	SDL_Quit();
-}
-
-void update_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b)
-{
-	SDL_Rect rect{x, SCREEN_HEIGHT - 1 - y, 1, 1};
-	SDL_FillRect(gScreenSurface, &rect, SDL_MapRGB(gScreenSurface->format, r, g, b));
-	SDL_UpdateWindowSurface(gWindow);
 }
 
 color ray_color(const ray &r, const hittable &world, int depth)
@@ -218,6 +214,45 @@ std::tuple<hittable_list, camera> scene_3_ball(int idx)
 	return std::make_tuple(world, cam);
 }
 
+static std::array<std::array<uint32_t, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_times{0};
+static std::array<std::array<color, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_values{color{0, 0, 0}};
+
+bool signal_to_stop = false;
+int block_size = 3;
+// int num_threads = block_size * block_size;
+int num_threads = std::thread::hardware_concurrency() - 1;
+void ray_task(hittable_list world, camera cam, int task_idx)
+{
+	int iidx = task_idx / block_size;
+	int jidx = task_idx % block_size;
+
+	while (!signal_to_stop)
+	{
+		int i = random_int(0, SCREEN_WIDTH - 1);
+		int j = random_int(0, SCREEN_HEIGHT - 1);
+
+
+		i = i - i % block_size + task_idx;
+		i = SCREEN_WIDTH - 1 > i ? i : SCREEN_WIDTH - 1;
+		// i = i - i % block_size + iidx;
+		// i = SCREEN_WIDTH - 1 > i ? i : SCREEN_WIDTH - 1;
+		// j = j - j % block_size + jidx;
+		// j = SCREEN_HEIGHT - 1 > j ? j : SCREEN_HEIGHT - 1;
+
+		color &pixel_color = sample_values[i][j];
+		uint32_t &pixel_sample = sample_times[i][j];
+
+		auto u = (i + random_double()) / (SCREEN_WIDTH - 1);
+		auto v = (j + random_double()) / (SCREEN_HEIGHT - 1);
+		ray r = cam.get_ray(u, v);
+
+		pixel_sample += 1;
+
+		// pixel_color += ray_color_rr(r, world, 1. / DEPTH);
+		pixel_color += ray_color(r, world, DEPTH);
+	}
+}
+
 int main(int argc, char *args[])
 {
 	//Start up SDL and create window
@@ -230,11 +265,6 @@ int main(int argc, char *args[])
 
 	SDL_FillRect(gScreenSurface, NULL, SDL_MapRGB(gScreenSurface->format, 0x00, 0x00, 0x00));
 	SDL_UpdateWindowSurface(gWindow);
-
-	// Image
-	const int image_width = SCREEN_WIDTH;
-	const int image_height = SCREEN_HEIGHT;
-	const int depth = 3;
 
 	// World
 	hittable_list world;
@@ -259,35 +289,37 @@ int main(int argc, char *args[])
 		break;
 	}
 
-	static std::array<std::array<uint32_t, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_times{0};
-	static std::array<std::array<color, SCREEN_HEIGHT>, SCREEN_WIDTH> sample_values{color{0, 0, 0}};
+	signal_to_stop = false;
+
+	std::cout << num_threads;
+
+	std::vector<std::thread> threads(num_threads);
+
+	for (int idx = 0; idx < num_threads; idx++)
+	{
+		threads[idx] = std::thread(ray_task, world, cam, idx);
+	}
 
 	SDL_Event e;
 	while (true)
 	{
-		int i = random_int(0, image_width - 1);
-		int j = random_int(0, image_height - 1);
+		for (int i = 0; i < SCREEN_WIDTH; i++)
+			for (int j = 0; j < SCREEN_HEIGHT; j++)
+			{
+				auto c_tuple = get_color(sample_values[i][j], sample_times[i][j]);
+				SDL_Rect rect{i, SCREEN_HEIGHT - 1 - j, 1, 1};
+				SDL_FillRect(gScreenSurface, &rect, SDL_MapRGB(gScreenSurface->format, std::get<0>(c_tuple), std::get<1>(c_tuple), std::get<2>(c_tuple)));
+			}
 
-		color &pixel_color = sample_values[i][j];
-		uint32_t &pixel_sample = sample_times[i][j];
-
-		auto u = (i + random_double()) / (image_width - 1);
-		auto v = (j + random_double()) / (image_height - 1);
-		ray r = cam.get_ray(u, v);
-		pixel_color += ray_color_rr(r, world, 1. / depth);
-		// pixel_color += ray_color(r, world, depth);
-
-		pixel_sample += 1;
-
-		auto c_tuple = get_color(pixel_color, pixel_sample);
-		update_pixel(i, j, std::get<0>(c_tuple), std::get<1>(c_tuple), std::get<2>(c_tuple));
-
+		SDL_UpdateWindowSurface(gWindow);
 		if (SDL_PollEvent(&e) && e.type == SDL_QUIT)
 		{
+			signal_to_stop = true;
 			break;
 		}
 	}
 
+	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
 	close();
 	return 0;
 }
