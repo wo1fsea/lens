@@ -243,7 +243,7 @@ void ray_task(hittable_list world, camera cam, int task_idx)
 
 		pixel_sample += 1;
 
-		pixel_color += ray_color(r, world, DEPTH);
+		pixel_color += ray_color_rr(r, world, 1./DEPTH);
 	}
 }
 
