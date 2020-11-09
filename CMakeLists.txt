@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 project(lens)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (APPLE)
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
